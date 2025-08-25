@@ -18,6 +18,7 @@ const convert = $("convert");
 const details = $("details");
 const size = $("size");
 const ink = $("ink");
+const premiumWarning = $("premiumWarning");
 const templateCanvas = $("templateCanvas");
 const previewCanvas = $("previewCanvas");
 const previewCanvasButton = $("previewCanvasButton");
@@ -60,6 +61,12 @@ const messageBoxTitle = $("messageBoxTitle");
 const messageBoxContent = $("messageBoxContent");
 const messageBoxConfirm = $("messageBoxConfirm");
 const messageBoxCancel = $("messageBoxCancel");
+const proxyEnabled = $("proxyEnabled");
+const proxyFormContainer = $("proxyFormContainer");
+const proxyRotationMode = $("proxyRotationMode");
+const proxyCount = $("proxyCount");
+const reloadProxiesBtn = $("reloadProxiesBtn");
+const logProxyUsage = $("logProxyUsage");
 const usePaidColors = $("usePaidColors");
 const colorAlgorithm = $("colorAlgorithm");
 
@@ -256,7 +263,17 @@ const basic_colors_lab = Object.keys(basic_colors).reduce((acc, color) => {
     return acc;
 }, {});
 
+const colors_lab = Object.keys(colors).reduce((acc, color) => {
+    acc[color] = rgbToLab(color.split(',').map(Number));
+    return acc;
+}, {});
+
 const basic_colors_oklab = Object.keys(basic_colors).reduce((acc, color) => {
+    acc[color] = srgb_to_oklab(color.split(',').map(Number));
+    return acc;
+}, {});
+
+const colors_oklab = Object.keys(colors).reduce((acc, color) => {
     acc[color] = srgb_to_oklab(color.split(',').map(Number));
     return acc;
 }, {});
@@ -268,15 +285,17 @@ const closest_ciede2000 = color => {
     let minDistance = Infinity;
     let closestColorKey = null;
 
-    for (const key in basic_colors_lab) {
-        const distance = deltaE(targetLab, basic_colors_lab[key]);
+    const available_colors_lab = usePaidColors.checked ? colors_lab : basic_colors_lab;
+
+    for (const key in available_colors_lab) {
+        const distance = deltaE(targetLab, available_colors_lab[key]);
         if (distance < minDistance) {
             minDistance = distance;
             closestColorKey = key;
         }
     }
 
-    return basic_colors[closestColorKey];
+    return colors[closestColorKey];
 };
 
 const closest_oklab = color => {
@@ -286,15 +305,17 @@ const closest_oklab = color => {
     let minDistance = Infinity;
     let closestColorKey = null;
 
-    for (const key in basic_colors_oklab) {
-        const distance = deltaE_ok(targetOklab, basic_colors_oklab[key]);
+    const available_colors_oklab = usePaidColors.checked ? colors_oklab : basic_colors_oklab;
+
+    for (const key in available_colors_oklab) {
+        const distance = deltaE_ok(targetOklab, available_colors_oklab[key]);
         if (distance < minDistance) {
             minDistance = distance;
             closestColorKey = key;
         }
     }
 
-    return basic_colors[closestColorKey];
+    return colors[closestColorKey];
 };
 
 const closest_cie76 = color => {
@@ -304,9 +325,11 @@ const closest_cie76 = color => {
     let minDistance = Infinity;
     let closestColorKey = null;
 
-    for (const key in basic_colors_lab) {
+    const available_colors_lab = usePaidColors.checked ? colors_lab : basic_colors_lab;
+
+    for (const key in available_colors_lab) {
         const [l1, a1, b1] = targetLab;
-        const [l2, a2, b2] = basic_colors_lab[key];
+        const [l2, a2, b2] = available_colors_lab[key];
         const distance = Math.sqrt(Math.pow(l1 - l2, 2) + Math.pow(a1 - a2, 2) + Math.pow(b1 - b2, 2));
         if (distance < minDistance) {
             minDistance = distance;
@@ -314,7 +337,7 @@ const closest_cie76 = color => {
         }
     }
 
-    return basic_colors[closestColorKey];
+    return colors[closestColorKey];
 };
 
 const closest_rgb = color => {
@@ -322,7 +345,9 @@ const closest_rgb = color => {
     let minDistance = Infinity;
     let closestColorKey = null;
 
-    for (const key in basic_colors) {
+    const available_colors = usePaidColors.checked ? colors : basic_colors;
+
+    for (const key in available_colors) {
         const [r2, g2, b2] = key.split(',').map(Number);
         const distance = Math.sqrt(Math.pow(r1 - r2, 2) + Math.pow(g1 - g2, 2) + Math.pow(b1 - b2, 2));
         if (distance < minDistance) {
@@ -331,7 +356,7 @@ const closest_rgb = color => {
         }
     }
 
-    return basic_colors[closestColorKey];
+    return colors[closestColorKey];
 };
 
 const drawTemplate = (template, canvas) => {
@@ -352,6 +377,7 @@ const drawTemplate = (template, canvas) => {
                 imageData.data[i + 3] = 255;
                 continue;
             };
+            console.log(color)
             const [r, g, b] = colorById(color).split(',').map(Number);
             imageData.data[i] = r;
             imageData.data[i + 1] = g;
@@ -372,14 +398,14 @@ const loadTemplates = async (f) => {
 const fetchCanvas = async (txVal, tyVal, pxVal, pyVal, width, height) => {
     const TILE_SIZE = 1000;
     const radius = Math.max(0, parseInt(previewBorder.value, 10) || 0);
-    
+
     const startX = txVal * TILE_SIZE + pxVal - radius;
     const startY = tyVal * TILE_SIZE + pyVal - radius;
     const displayWidth = width + (radius * 2);
     const displayHeight = height + (radius * 2);
     const endX = startX + displayWidth;
     const endY = startY + displayHeight;
-    
+
     const startTileX = Math.floor(startX / TILE_SIZE);
     const startTileY = Math.floor(startY / TILE_SIZE);
     const endTileX = Math.floor((endX - 1) / TILE_SIZE);
@@ -431,18 +457,20 @@ const fetchCanvas = async (txVal, tyVal, pxVal, pyVal, width, height) => {
         const canvasX = templateX + radius;
         const canvasY = templateY + radius;
         const canvasIdx = (canvasY * displayWidth + canvasX) * 4;
-        
+
         if (b[canvasIdx + 3] === 0) continue;
 
         ctx.fillStyle = 'rgba(255,0,0,0.8)';
         ctx.fillRect(canvasX, canvasY, 1, 1);
     }
+    previewCanvas.style.display = 'block';
 };
 
 const nearestimgdecoder = (imageData, width, height) => {
     const d = imageData.data;
     const matrix = Array.from({ length: width }, () => Array(height).fill(0));
     let ink = 0;
+    let hasPremium = false;
 
     for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
@@ -454,7 +482,7 @@ const nearestimgdecoder = (imageData, width, height) => {
                 if (rgb == "158,189,255") matrix[x][y] = -1;
                 else {
                     let id;
-                    if (colors[rgb] && usePaidColors.checked) {
+                    if (colors[rgb]) {
                         id = colors[rgb];
                     } else {
                         if (colorAlgorithm.value === 'RGB') {
@@ -471,14 +499,15 @@ const nearestimgdecoder = (imageData, width, height) => {
                         }
                     }
                     matrix[x][y] = id;
-                };
+                    if (id >= 32) hasPremium = true;
+                }
                 ink++;
             } else {
                 matrix[x][y] = 0;
             }
         }
     }
-    return { matrix, ink };
+    return { matrix, ink, hasPremium };
 };
 
 let currentTemplate = { width: 0, height: 0, data: [] };
@@ -499,13 +528,14 @@ const processImageFile = (file, callback) => {
 
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             originalImageData = imageData;
-            const { matrix, ink } = nearestimgdecoder(imageData, canvas.width, canvas.height);
+            const { matrix, ink, hasPremium } = nearestimgdecoder(imageData, canvas.width, canvas.height);
 
             const template = {
                 width: canvas.width,
                 height: canvas.height,
                 ink,
-                data: matrix
+                data: matrix,
+                hasPremium
             };
 
             canvas.remove();
@@ -523,25 +553,45 @@ const processEvent = () => {
             drawTemplate(template, templateCanvas);
             size.innerHTML = `${template.width}x${template.height}px`;
             ink.innerHTML = template.ink;
+            if (template.hasPremium) {
+                premiumWarning.innerHTML = "<b>Warning:</b> This template uses premium colors. Ensure your selected accounts have purchased them.";
+                premiumWarning.style.display = "block";
+            } else {
+                premiumWarning.style.display = "none";
+            }
+            templateCanvas.style.display = 'block';
+            previewCanvas.style.display = 'none';
             details.style.display = "block";
         });
     };
 };
 const reprocessFromOriginal = () => {
     if (!originalImageData) return;
-    const { matrix, ink } = nearestimgdecoder(originalImageData, originalImageData.width, originalImageData.height);
+    const { matrix, ink, hasPremium } = nearestimgdecoder(originalImageData, originalImageData.width, originalImageData.height);
+    console.log("hasPremium:", hasPremium)
     const template = {
         width: originalImageData.width,
         height: originalImageData.height,
         ink,
-        data: matrix
+        data: matrix,
+        hasPremium
     };
     currentTemplate = template;
     drawTemplate(template, templateCanvas);
+    size.innerHTML = `${template.width}x${template.height}px`;
     ink.innerHTML = template.ink;
+    if (template.hasPremium) {
+        premiumWarning.innerHTML = "<b>Warning:</b> This template uses premium colors. Ensure your selected accounts have purchased them.";
+        premiumWarning.style.display = "block";
+    } else {
+        premiumWarning.style.display = "none";
+    }
+    templateCanvas.style.display = 'block';
+    previewCanvas.style.display = 'none';
+    details.style.display = "block";
 };
 convertInput.addEventListener('change', processEvent);
-usePaidColors.addEventListener('change', processEvent);
+usePaidColors.addEventListener('change', reprocessFromOriginal);
 colorAlgorithm.addEventListener('change', reprocessFromOriginal);
 
 previewCanvasButton.addEventListener('click', async () => {
@@ -574,6 +624,8 @@ const resetTemplateForm = () => {
     submitTemplate.innerHTML = '<img src="icons/addTemplate.svg">Add Template';
     delete templateForm.dataset.editId;
     details.style.display = "none";
+    premiumWarning.style.display = "none";
+    previewCanvas.style.display = 'none';
     currentTemplate = { width: 0, height: 0, data: [] };
 };
 
@@ -735,48 +787,59 @@ checkUserStatus.addEventListener("click", async () => {
     checkUserStatus.innerHTML = "Checking...";
     const userElements = Array.from(document.querySelectorAll('.user'));
 
+    // Set all users to "checking" state
+    userElements.forEach(userEl => {
+        const infoSpans = userEl.querySelectorAll('.user-info > span');
+        infoSpans.forEach(span => span.style.color = 'var(--warning-color)');
+    });
+
     let totalCurrent = 0;
     let totalMax = 0;
 
-    const { data: settings } = await axios.get('/settings');
-    const cooldown = settings.accountCheckCooldown || 0;
+    try {
+        const response = await axios.post('/users/status');
+        const statuses = response.data;
 
-    for (const userEl of userElements) {
-        const id = userEl.id.split('-')[1];
-        const infoSpans = userEl.querySelectorAll('.user-info > span');
-        const currentChargesEl = userEl.querySelector('.user-stats b:nth-of-type(1)');
-        const maxChargesEl = userEl.querySelector('.user-stats b:nth-of-type(2)');
-        const currentLevelEl = userEl.querySelector('.user-stats b:nth-of-type(3)');
-        const levelProgressEl = userEl.querySelector('.level-progress');
+        for (const userEl of userElements) {
+            const id = userEl.id.split('-')[1];
+            const status = statuses[id];
 
-        infoSpans.forEach(span => span.style.color = 'var(--warning-color)');
-        try {
-            const response = await axios.get(`/user/status/${id}`);
-            const userInfo = response.data;
+            const infoSpans = userEl.querySelectorAll('.user-info > span');
+            const currentChargesEl = userEl.querySelector('.user-stats b:nth-of-type(1)');
+            const maxChargesEl = userEl.querySelector('.user-stats b:nth-of-type(2)');
+            const currentLevelEl = userEl.querySelector('.user-stats b:nth-of-type(3)');
+            const levelProgressEl = userEl.querySelector('.level-progress');
 
-            const charges = Math.floor(userInfo.charges.count);
-            const max = userInfo.charges.max;
-            const level = Math.floor(userInfo.level);
-            const progress = Math.round((userInfo.level % 1) * 100);
+            if (status && status.success) {
+                const userInfo = status.data;
+                const charges = Math.floor(userInfo.charges.count);
+                const max = userInfo.charges.max;
+                const level = Math.floor(userInfo.level);
+                const progress = Math.round((userInfo.level % 1) * 100);
 
-            currentChargesEl.textContent = charges;
-            maxChargesEl.textContent = max;
-            currentLevelEl.textContent = level;
-            levelProgressEl.textContent = `(${progress}%)`;
-            totalCurrent += charges;
-            totalMax += max;
+                currentChargesEl.textContent = charges;
+                maxChargesEl.textContent = max;
+                currentLevelEl.textContent = level;
+                levelProgressEl.textContent = `(${progress}%)`;
+                totalCurrent += charges;
+                totalMax += max;
 
-            infoSpans.forEach(span => span.style.color = 'var(--success-color)');
-        } catch (error) {
-            currentChargesEl.textContent = "ERR";
-            maxChargesEl.textContent = "ERR";
-            currentLevelEl.textContent = "?";
-            levelProgressEl.textContent = "(?%)";
+                infoSpans.forEach(span => span.style.color = 'var(--success-color)');
+            } else {
+                currentChargesEl.textContent = "ERR";
+                maxChargesEl.textContent = "ERR";
+                currentLevelEl.textContent = "?";
+                levelProgressEl.textContent = "(?%)";
+                infoSpans.forEach(span => span.style.color = 'var(--error-color)');
+            }
+        }
+    } catch (error) {
+        handleError(error);
+        // On general error, mark all as failed
+        userElements.forEach(userEl => {
+            const infoSpans = userEl.querySelectorAll('.user-info > span');
             infoSpans.forEach(span => span.style.color = 'var(--error-color)');
-        }
-        if (cooldown > 0) {
-            await sleep(cooldown);
-        }
+        });
     }
 
     totalCharges.textContent = totalCurrent;
@@ -785,6 +848,7 @@ checkUserStatus.addEventListener("click", async () => {
     checkUserStatus.disabled = false;
     checkUserStatus.innerHTML = '<img src="icons/check.svg">Check Account Status';
 });
+
 openAddTemplate.addEventListener("click", () => {
     resetTemplateForm();
     userSelectList.innerHTML = "";
@@ -991,6 +1055,13 @@ openSettings.addEventListener("click", async () => {
         outlineMode.checked = currentSettings.outlineMode;
         interleavedMode.checked = currentSettings.interleavedMode;
         skipPaintedPixels.checked = currentSettings.skipPaintedPixels;
+
+        proxyEnabled.checked = currentSettings.proxyEnabled;
+        proxyRotationMode.value = currentSettings.proxyRotationMode || 'sequential';
+        logProxyUsage.checked = currentSettings.logProxyUsage;
+        proxyCount.textContent = `${currentSettings.proxyCount} proxies loaded from file.`;
+        proxyFormContainer.style.display = proxyEnabled.checked ? 'block' : 'none';
+
         accountCooldown.value = currentSettings.accountCooldown / 1000;
         purchaseCooldown.value = currentSettings.purchaseCooldown / 1000;
         accountCheckCooldown.value = currentSettings.accountCheckCooldown / 1000;
@@ -1019,6 +1090,31 @@ turnstileNotifications.addEventListener('change', () => saveSetting({ turnstileN
 outlineMode.addEventListener('change', () => saveSetting({ outlineMode: outlineMode.checked }));
 interleavedMode.addEventListener('change', () => saveSetting({ interleavedMode: interleavedMode.checked }));
 skipPaintedPixels.addEventListener('change', () => saveSetting({ skipPaintedPixels: skipPaintedPixels.checked }));
+
+proxyEnabled.addEventListener('change', () => {
+    proxyFormContainer.style.display = proxyEnabled.checked ? 'block' : 'none';
+    saveSetting({ proxyEnabled: proxyEnabled.checked });
+});
+
+logProxyUsage.addEventListener('change', () => {
+    saveSetting({ logProxyUsage: logProxyUsage.checked });
+});
+
+proxyRotationMode.addEventListener('change', () => {
+    saveSetting({ proxyRotationMode: proxyRotationMode.value });
+});
+
+reloadProxiesBtn.addEventListener('click', async () => {
+    try {
+        const response = await axios.post('/reload-proxies');
+        if (response.data.success) {
+            proxyCount.textContent = `${response.data.count} proxies reloaded from file.`;
+            showMessage("Success", "Proxies reloaded successfully!");
+        }
+    } catch (error) {
+        handleError(error);
+    }
+});
 
 accountCooldown.addEventListener('change', () => {
     const value = parseInt(accountCooldown.value, 10) * 1000;
