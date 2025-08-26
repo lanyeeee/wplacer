@@ -36,6 +36,7 @@ const selectAllUsers = $("selectAllUsers");
 const canBuyMaxCharges = $("canBuyMaxCharges");
 const canBuyCharges = $("canBuyCharges");
 const antiGriefMode = $("antiGriefMode");
+const enableAutostart = $("enableAutostart");
 const submitTemplate = $("submitTemplate");
 const manageTemplates = $("manageTemplates");
 const templateList = $("templateList");
@@ -44,10 +45,9 @@ const stopAll = $("stopAll");
 const settings = $("settings");
 const drawingDirectionSelect = $("drawingDirectionSelect");
 const drawingOrderSelect = $("drawingOrderSelect");
+const pixelSkipSelect = $("pixelSkipSelect");
 const outlineMode = $("outlineMode");
-const interleavedMode = $("interleavedMode");
 const skipPaintedPixels = $("skipPaintedPixels");
-const turnstileNotifications = $("turnstileNotifications");
 const accountCooldown = $("accountCooldown");
 const purchaseCooldown = $("purchaseCooldown");
 const accountCheckCooldown = $("accountCheckCooldown");
@@ -648,7 +648,8 @@ templateForm.addEventListener('submit', async (e) => {
         userIds: selectedUsers,
         canBuyCharges: canBuyCharges.checked,
         canBuyMaxCharges: canBuyMaxCharges.checked,
-        antiGriefMode: antiGriefMode.checked
+        antiGriefMode: antiGriefMode.checked,
+        enableAutostart: enableAutostart.checked
     };
 
     if (currentTemplate && currentTemplate.width > 0) {
@@ -717,8 +718,6 @@ openManageUsers.addEventListener("click", () => {
             const user = document.createElement('div');
             user.className = 'user';
             user.id = `user-${id}`;
-            const expirationDate = users[id].expirationDate;
-            const expirationStr = expirationDate ? new Date(expirationDate * 1000).toLocaleString() : 'N/A';
 
             user.innerHTML = `
                 <div class="user-info">
@@ -726,7 +725,7 @@ openManageUsers.addEventListener("click", () => {
                     <span>(#${id})</span>
                     <div class="user-stats">
                         Charges: <b>?</b>/<b>?</b> | Level <b>?</b> <span class="level-progress">(?%)</span><br>
-                        Expires: <b>${expirationStr}</b>
+                        Droplets: <b>?</b>
                     </div>
                 </div>
                 <div class="user-actions">
@@ -806,6 +805,7 @@ checkUserStatus.addEventListener("click", async () => {
             const currentChargesEl = userEl.querySelector('.user-stats b:nth-of-type(1)');
             const maxChargesEl = userEl.querySelector('.user-stats b:nth-of-type(2)');
             const currentLevelEl = userEl.querySelector('.user-stats b:nth-of-type(3)');
+            const dropletsEl = userEl.querySelector('.user-stats b:nth-of-type(4)');
             const levelProgressEl = userEl.querySelector('.level-progress');
 
             if (status && status.success) {
@@ -818,6 +818,7 @@ checkUserStatus.addEventListener("click", async () => {
                 currentChargesEl.textContent = charges;
                 maxChargesEl.textContent = max;
                 currentLevelEl.textContent = level;
+                dropletsEl.textContent = userInfo.droplets;
                 levelProgressEl.textContent = `(${progress}%)`;
                 totalCurrent += charges;
                 totalMax += max;
@@ -827,6 +828,7 @@ checkUserStatus.addEventListener("click", async () => {
                 currentChargesEl.textContent = "ERR";
                 maxChargesEl.textContent = "ERR";
                 currentLevelEl.textContent = "?";
+                dropletsEl.textContent = "ERR";
                 levelProgressEl.textContent = "(?%)";
                 infoSpans.forEach(span => span.style.color = 'var(--error-color)');
             }
@@ -1007,6 +1009,7 @@ openManageTemplates.addEventListener("click", () => {
                     canBuyCharges.checked = t.canBuyCharges;
                     canBuyMaxCharges.checked = t.canBuyMaxCharges;
                     antiGriefMode.checked = t.antiGriefMode;
+                    enableAutostart.checked = t.enableAutostart;
 
                     document.querySelectorAll('input[name="user_checkbox"]').forEach(cb => {
                         if (t.userIds.includes(cb.value)) {
@@ -1049,9 +1052,8 @@ openSettings.addEventListener("click", async () => {
         const currentSettings = response.data;
         drawingDirectionSelect.value = currentSettings.drawingDirection;
         drawingOrderSelect.value = currentSettings.drawingOrder;
-        turnstileNotifications.checked = currentSettings.turnstileNotifications;
+        pixelSkipSelect.value = currentSettings.pixelSkip;
         outlineMode.checked = currentSettings.outlineMode;
-        interleavedMode.checked = currentSettings.interleavedMode;
         skipPaintedPixels.checked = currentSettings.skipPaintedPixels;
 
         proxyEnabled.checked = currentSettings.proxyEnabled;
@@ -1084,9 +1086,8 @@ const saveSetting = async (setting) => {
 
 drawingDirectionSelect.addEventListener('change', () => saveSetting({ drawingDirection: drawingDirectionSelect.value }));
 drawingOrderSelect.addEventListener('change', () => saveSetting({ drawingOrder: drawingOrderSelect.value }));
-turnstileNotifications.addEventListener('change', () => saveSetting({ turnstileNotifications: turnstileNotifications.checked }));
+pixelSkipSelect.addEventListener('change', () => saveSetting({ pixelSkip: parseInt(pixelSkipSelect.value, 10) }));
 outlineMode.addEventListener('change', () => saveSetting({ outlineMode: outlineMode.checked }));
-interleavedMode.addEventListener('change', () => saveSetting({ interleavedMode: interleavedMode.checked }));
 skipPaintedPixels.addEventListener('change', () => saveSetting({ skipPaintedPixels: skipPaintedPixels.checked }));
 
 proxyEnabled.addEventListener('change', () => {
