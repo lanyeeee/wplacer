@@ -377,7 +377,6 @@ const drawTemplate = (template, canvas) => {
                 imageData.data[i + 3] = 255;
                 continue;
             };
-            console.log(color)
             const [r, g, b] = colorById(color).split(',').map(Number);
             imageData.data[i] = r;
             imageData.data[i + 1] = g;
@@ -568,7 +567,6 @@ const processEvent = () => {
 const reprocessFromOriginal = () => {
     if (!originalImageData) return;
     const { matrix, ink, hasPremium } = nearestimgdecoder(originalImageData, originalImageData.width, originalImageData.height);
-    console.log("hasPremium:", hasPremium)
     const template = {
         width: originalImageData.width,
         height: originalImageData.height,
