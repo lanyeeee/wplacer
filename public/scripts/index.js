@@ -604,6 +604,31 @@ previewCanvasButton.addEventListener('click', async () => {
     await fetchCanvas(txVal, tyVal, pxVal, pyVal, currentTemplate.width, currentTemplate.height);
 });
 
+function pastePinCoordinates(text) {
+    const patterns = [
+        /Tl X:\s*(\d+),\s*Tl Y:\s*(\d+),\s*Px X:\s*(\d+),\s*Px Y:\s*(\d+)/,
+        /^\s*(\d+)[\s,;]+(\d+)[\s,;]+(\d+)[\s,;]+(\d+)\s*$/
+    ];
+    for (const p of patterns) {
+        match = p.exec(text);
+        if (match) {
+            $("tx").value = match[1];
+            $("ty").value = match[2];
+            $("px").value = match[3];
+            $("py").value = match[4];
+            return true;
+        }
+    }
+    return false;
+}
+
+document.addEventListener("paste", (e) => {
+    const text = e.clipboardData?.getData("text");
+    if (text && pastePinCoordinates(text)) {
+        e.preventDefault();
+    }
+});
+
 canBuyMaxCharges.addEventListener('change', () => {
     if (canBuyMaxCharges.checked) {
         canBuyCharges.checked = false;
@@ -1000,6 +1025,7 @@ openManageTemplates.addEventListener("click", () => {
                 editButton.innerHTML = '<img src="icons/settings.svg">Edit Template';
                 editButton.addEventListener('click', () => {
                     openAddTemplate.click();
+
                     templateFormTitle.textContent = `Edit Template: ${t.name}`;
                     submitTemplate.innerHTML = '<img src="icons/edit.svg">Save Changes';
                     templateForm.dataset.editId = id;
@@ -1011,11 +1037,12 @@ openManageTemplates.addEventListener("click", () => {
                     antiGriefMode.checked = t.antiGriefMode;
                     enableAutostart.checked = t.enableAutostart;
 
-                    document.querySelectorAll('input[name="user_checkbox"]').forEach(cb => {
-                        if (t.userIds.includes(cb.value)) {
-                            cb.checked = true;
-                        }
-                    });
+                    // Wait for DOM to update, then check appropriate users
+                    setTimeout(() => {
+                        document.querySelectorAll('input[name="user_checkbox"]').forEach(cb => {
+                            cb.checked = t.userIds.includes(cb.value);
+                        });
+                    }, 100);
                 });
 
                 const delButton = document.createElement('button');
