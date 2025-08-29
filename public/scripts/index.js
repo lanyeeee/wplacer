@@ -36,6 +36,9 @@ const selectAllUsers = $("selectAllUsers");
 const canBuyMaxCharges = $("canBuyMaxCharges");
 const canBuyCharges = $("canBuyCharges");
 const antiGriefMode = $("antiGriefMode");
+const eraseMode = $("eraseMode");
+const templateOutlineMode = $("templateOutlineMode");
+const templateSkipPaintedPixels = $("templateSkipPaintedPixels");
 const enableAutostart = $("enableAutostart");
 const submitTemplate = $("submitTemplate");
 const manageTemplates = $("manageTemplates");
@@ -46,8 +49,6 @@ const settings = $("settings");
 const drawingDirectionSelect = $("drawingDirectionSelect");
 const drawingOrderSelect = $("drawingOrderSelect");
 const pixelSkipSelect = $("pixelSkipSelect");
-const outlineMode = $("outlineMode");
-const skipPaintedPixels = $("skipPaintedPixels");
 const accountCooldown = $("accountCooldown");
 const purchaseCooldown = $("purchaseCooldown");
 const accountCheckCooldown = $("accountCheckCooldown");
@@ -56,6 +57,8 @@ const antiGriefStandby = $("antiGriefStandby");
 const chargeThreshold = $("chargeThreshold");
 const totalCharges = $("totalCharges");
 const totalMaxCharges = $("totalMaxCharges");
+const totalDroplets = $("totalDroplets");
+const totalPPH = $("totalPPH");
 const messageBoxOverlay = $("messageBoxOverlay");
 const messageBoxTitle = $("messageBoxTitle");
 const messageBoxContent = $("messageBoxContent");
@@ -72,9 +75,17 @@ const colorAlgorithm = $("colorAlgorithm");
 
 // --- Global State ---
 let templateUpdateInterval = null;
-
-// Message Box
 let confirmCallback = null;
+let currentTab = 'main';
+let currentTemplate = { width: 0, height: 0, data: [] };
+
+const tabs = {
+    main,
+    manageUsers,
+    addTemplate,
+    manageTemplates,
+    settings
+};
 
 const showMessage = (title, content) => {
     messageBoxTitle.innerHTML = title;
@@ -131,6 +142,15 @@ const handleError = (error) => {
     showMessage("Error", message);
 };
 
+const changeTab = (tabName) => {
+    if (templateUpdateInterval) {
+        clearInterval(templateUpdateInterval);
+        templateUpdateInterval = null;
+    }
+    Object.values(tabs).forEach(tab => tab.style.display = 'none');
+    tabs[tabName].style.display = 'block';
+    currentTab = tabName;
+};
 
 // users
 const loadUsers = async (f) => {
@@ -141,6 +161,7 @@ const loadUsers = async (f) => {
         handleError(error);
     };
 };
+
 userForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     try {
@@ -386,6 +407,7 @@ const drawTemplate = (template, canvas) => {
     };
     ctx.putImageData(imageData, 0, 0);
 };
+
 const loadTemplates = async (f) => {
     try {
         const templates = await axios.get("/templates");
@@ -394,6 +416,7 @@ const loadTemplates = async (f) => {
         handleError(error);
     };
 };
+
 const fetchCanvas = async (txVal, tyVal, pxVal, pyVal, width, height) => {
     const TILE_SIZE = 1000;
     const radius = Math.max(0, parseInt(previewBorder.value, 10) || 0);
@@ -447,7 +470,6 @@ const fetchCanvas = async (txVal, tyVal, pxVal, pyVal, width, height) => {
     const b = baseImage.data;
     const t = templateImage.data;
     for (let i = 0; i < t.length; i += 4) {
-        // skip transparent template pixels
         if (t[i + 3] === 0) continue;
 
         const templateIdx = i / 4;
@@ -509,7 +531,6 @@ const nearestimgdecoder = (imageData, width, height) => {
     return { matrix, ink, hasPremium };
 };
 
-let currentTemplate = { width: 0, height: 0, data: [] };
 let originalImageData = null;
 
 const processImageFile = (file, callback) => {
@@ -543,6 +564,7 @@ const processImageFile = (file, callback) => {
     };
     reader.readAsDataURL(file);
 };
+
 const processEvent = () => {
     const file = convertInput.files[0];
     if (file) {
@@ -564,6 +586,7 @@ const processEvent = () => {
         });
     };
 };
+
 const reprocessFromOriginal = () => {
     if (!originalImageData) return;
     const { matrix, ink, hasPremium } = nearestimgdecoder(originalImageData, originalImageData.width, originalImageData.height);
@@ -588,6 +611,7 @@ const reprocessFromOriginal = () => {
     previewCanvas.style.display = 'none';
     details.style.display = "block";
 };
+
 convertInput.addEventListener('change', processEvent);
 usePaidColors.addEventListener('change', reprocessFromOriginal);
 colorAlgorithm.addEventListener('change', reprocessFromOriginal);
@@ -674,6 +698,9 @@ templateForm.addEventListener('submit', async (e) => {
         canBuyCharges: canBuyCharges.checked,
         canBuyMaxCharges: canBuyMaxCharges.checked,
         antiGriefMode: antiGriefMode.checked,
+        eraseMode: eraseMode.checked,
+        outlineMode: templateOutlineMode.checked,
+        skipPaintedPixels: templateSkipPaintedPixels.checked,
         enableAutostart: enableAutostart.checked
     };
 
@@ -695,6 +722,7 @@ templateForm.addEventListener('submit', async (e) => {
         handleError(error);
     };
 });
+
 startAll.addEventListener('click', async () => {
     for (const child of templateList.children) {
         try {
@@ -706,6 +734,7 @@ startAll.addEventListener('click', async () => {
     showMessage("Success", "Finished! Check console for details.");
     openManageTemplates.click();
 });
+
 stopAll.addEventListener('click', async () => {
     for (const child of templateList.children) {
         try {
@@ -718,24 +747,13 @@ stopAll.addEventListener('click', async () => {
     openManageTemplates.click();
 });
 
-
-// tabs
-let currentTab = main;
-const changeTab = (el) => {
-    if (templateUpdateInterval) {
-        clearInterval(templateUpdateInterval);
-        templateUpdateInterval = null;
-    }
-    currentTab.style.display = "none";
-    el.style.display = "block";
-    currentTab = el;
-};
-const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 openManageUsers.addEventListener("click", () => {
     userList.innerHTML = "";
     userForm.reset();
     totalCharges.textContent = "?";
     totalMaxCharges.textContent = "?";
+    totalDroplets.textContent = "?";
+    totalPPH.textContent = "?";
     loadUsers(users => {
         const userCount = Object.keys(users).length;
         manageUsersTitle.textContent = `Existing Users (${userCount})`;
@@ -801,7 +819,7 @@ openManageUsers.addEventListener("click", () => {
             userList.appendChild(user);
         };
     });
-    changeTab(manageUsers);
+    changeTab('manageUsers');
 });
 
 checkUserStatus.addEventListener("click", async () => {
@@ -809,7 +827,6 @@ checkUserStatus.addEventListener("click", async () => {
     checkUserStatus.innerHTML = "Checking...";
     const userElements = Array.from(document.querySelectorAll('.user'));
 
-    // Set all users to "checking" state
     userElements.forEach(userEl => {
         const infoSpans = userEl.querySelectorAll('.user-info > span');
         infoSpans.forEach(span => span.style.color = 'var(--warning-color)');
@@ -817,6 +834,8 @@ checkUserStatus.addEventListener("click", async () => {
 
     let totalCurrent = 0;
     let totalMax = 0;
+    let totalDropletsCount = 0;
+    let successfulAccounts = 0;
 
     try {
         const response = await axios.post('/users/status');
@@ -843,10 +862,12 @@ checkUserStatus.addEventListener("click", async () => {
                 currentChargesEl.textContent = charges;
                 maxChargesEl.textContent = max;
                 currentLevelEl.textContent = level;
-                dropletsEl.textContent = userInfo.droplets;
+                dropletsEl.textContent = userInfo.droplets.toLocaleString();
                 levelProgressEl.textContent = `(${progress}%)`;
                 totalCurrent += charges;
                 totalMax += max;
+                totalDropletsCount += userInfo.droplets;
+                successfulAccounts++;
 
                 infoSpans.forEach(span => span.style.color = 'var(--success-color)');
             } else {
@@ -860,7 +881,6 @@ checkUserStatus.addEventListener("click", async () => {
         }
     } catch (error) {
         handleError(error);
-        // On general error, mark all as failed
         userElements.forEach(userEl => {
             const infoSpans = userEl.querySelectorAll('.user-info > span');
             infoSpans.forEach(span => span.style.color = 'var(--error-color)');
@@ -869,6 +889,9 @@ checkUserStatus.addEventListener("click", async () => {
 
     totalCharges.textContent = totalCurrent;
     totalMaxCharges.textContent = totalMax;
+    totalDroplets.textContent = totalDropletsCount.toLocaleString();
+    const pph = successfulAccounts * 120; // 1 pixel per 30s = 2 per min = 120 per hour
+    totalPPH.textContent = pph.toLocaleString();
 
     checkUserStatus.disabled = false;
     checkUserStatus.innerHTML = '<img src="icons/check.svg">Check Account Status';
@@ -898,8 +921,9 @@ openAddTemplate.addEventListener("click", () => {
             userSelectList.appendChild(userDiv);
         }
     });
-    changeTab(addTemplate);
+    changeTab('addTemplate');
 });
+
 selectAllUsers.addEventListener('click', () => {
     document.querySelectorAll('#userSelectList input[type="checkbox"]').forEach(cb => cb.checked = true);
 });
@@ -1035,9 +1059,11 @@ openManageTemplates.addEventListener("click", () => {
                     canBuyCharges.checked = t.canBuyCharges;
                     canBuyMaxCharges.checked = t.canBuyMaxCharges;
                     antiGriefMode.checked = t.antiGriefMode;
+                    eraseMode.checked = t.eraseMode;
+                    templateOutlineMode.checked = t.outlineMode;
+                    templateSkipPaintedPixels.checked = t.skipPaintedPixels;
                     enableAutostart.checked = t.enableAutostart;
 
-                    // Wait for DOM to update, then check appropriate users
                     setTimeout(() => {
                         document.querySelectorAll('input[name="user_checkbox"]').forEach(cb => {
                             cb.checked = t.userIds.includes(cb.value);
@@ -1071,8 +1097,9 @@ openManageTemplates.addEventListener("click", () => {
             templateUpdateInterval = setInterval(updateTemplateStatus, 2000);
         });
     });
-    changeTab(manageTemplates);
+    changeTab('manageTemplates');
 });
+
 openSettings.addEventListener("click", async () => {
     try {
         const response = await axios.get('/settings');
@@ -1080,8 +1107,6 @@ openSettings.addEventListener("click", async () => {
         drawingDirectionSelect.value = currentSettings.drawingDirection;
         drawingOrderSelect.value = currentSettings.drawingOrder;
         pixelSkipSelect.value = currentSettings.pixelSkip;
-        outlineMode.checked = currentSettings.outlineMode;
-        skipPaintedPixels.checked = currentSettings.skipPaintedPixels;
 
         proxyEnabled.checked = currentSettings.proxyEnabled;
         proxyRotationMode.value = currentSettings.proxyRotationMode || 'sequential';
@@ -1098,10 +1123,9 @@ openSettings.addEventListener("click", async () => {
     } catch (error) {
         handleError(error);
     }
-    changeTab(settings);
+    changeTab('settings');
 });
 
-// Settings
 const saveSetting = async (setting) => {
     try {
         await axios.put('/settings', setting);
@@ -1114,8 +1138,6 @@ const saveSetting = async (setting) => {
 drawingDirectionSelect.addEventListener('change', () => saveSetting({ drawingDirection: drawingDirectionSelect.value }));
 drawingOrderSelect.addEventListener('change', () => saveSetting({ drawingOrder: drawingOrderSelect.value }));
 pixelSkipSelect.addEventListener('change', () => saveSetting({ pixelSkip: parseInt(pixelSkipSelect.value, 10) }));
-outlineMode.addEventListener('change', () => saveSetting({ outlineMode: outlineMode.checked }));
-skipPaintedPixels.addEventListener('change', () => saveSetting({ skipPaintedPixels: skipPaintedPixels.checked }));
 
 proxyEnabled.addEventListener('change', () => {
     proxyFormContainer.style.display = proxyEnabled.checked ? 'block' : 'none';
